@@ -3,9 +3,13 @@ const client=window.supabase.createClient("https://cymrqyxknfocewznwpcn.supabase
 let me=null,member=null;
 const $=id=>document.getElementById(id);
 let sessionVersion=0;
+let recoveryMode=false;
+function showRecovery(){recoveryMode=true;$("recovery").hidden=false;$("recovery").scrollIntoView({behavior:"smooth",block:"center"});}
+function recoveryLinkPresent(){return location.hash.includes("type=recovery")||location.search.includes("type=recovery");}
 function clearPrivateUI(){
   me=null;member=null;recipient=null;
-  for(const id of ["workspace","redeemArea","chat","recovery","adminIdPanel"])$(id).hidden=true;
+  for(const id of ["workspace","redeemArea","chat","adminIdPanel"])$(id).hidden=true;
+  if(!recoveryMode)$("recovery").hidden=true;
   for(const id of ["members","messages","blockedMembers","idReviewQueue"])$(id).replaceChildren();
   for(const id of ["displayName","city","memberBirth","bio","photoFile","idDocumentFile","messageBody","newPassword","captureId","password"])$(id).value="";
   for(const id of ["memberStatus","appFeedback","recoveryStatus","redeemStatus"])$(id).textContent="";
@@ -28,7 +32,7 @@ async function loadSession(){
     $("workspace").hidden=false;$("redeemArea").hidden=false;
     for(const [id,key] of [["displayName","display_name"],["city","city"],["memberBirth","birth_date"],["bio","bio"]])$(id).value=member?.[key]||"";
     if(member)$("memberStatus").textContent=hasAccess()?"Membership active until "+new Date(member.paid_until&&Date.parse(member.paid_until)>Date.now()?member.paid_until:member.trial_ends_at).toLocaleString():"Free access has ended. Purchase 30-day access with PayPal in the Membership section, then verify your payment.";
-    if(location.hash.includes("type=recovery")||location.search.includes("type=recovery"))$("recovery").hidden=false;
+    if(recoveryMode||recoveryLinkPresent())showRecovery();
     await discover();
   }catch(error){if(version===sessionVersion){clearPrivateUI();$("feedback").textContent="Unable to verify your session. Please sign in again.";showError(error);}}
 }
@@ -49,7 +53,7 @@ async function logout(){
 client.auth.onAuthStateChange((event,session)=>{
   if(event==="SIGNED_OUT"||!session){++sessionVersion;clearPrivateUI();return;}
   if(me&&me.id!==session.user.id){++sessionVersion;clearPrivateUI();}
-  setTimeout(()=>loadSession().then(()=>{if((event==="PASSWORD_RECOVERY"||location.hash.includes("type=recovery"))&&me)$("recovery").hidden=false;}).catch(showError),0);
+  setTimeout(()=>loadSession().then(()=>{if(event==="PASSWORD_RECOVERY"||recoveryLinkPresent())showRecovery();}).catch(showError),0);
 });
 loadSession().catch(showError);
 
@@ -64,7 +68,7 @@ async function uploadSecondPhoto(){if(!member)return alert("Save your profile fi
 async function setNearbyLocation(){if(!me||!member)return alert("Save your profile first.");if(!navigator.geolocation)return alert("Location unavailable.");navigator.geolocation.getCurrentPosition(async pos=>{const latitude=Number(pos.coords.latitude.toFixed(3)),longitude=Number(pos.coords.longitude.toFixed(3));const r=await client.from("dating_members").update({latitude,longitude}).eq("user_id",me.id);$("memberStatus").textContent=r.error?.message||"Approximate location saved. You can now find nearby members.";},()=>alert("Location permission was not granted."),{enableHighAccuracy:false,timeout:12000,maximumAge:300000});}
 async function submitIdentityDocument(){const status=$("idDocumentStatus");if(!me||!member){status.textContent="Sign in and save your profile first.";return}const file=$("idDocumentFile").files[0];if(!file){status.textContent="Select an image of your ID.";return}if(!["image/jpeg","image/png","image/webp"].includes(file.type)||file.size>10485760){status.textContent="Use a JPG, PNG, or WebP image under 10 MB.";return}const prior=await client.from("dating_id_submissions").select("status").eq("user_id",me.id).maybeSingle();if(prior.error){status.textContent="Unable to check existing submission.";return}if(prior.data){status.textContent="An ID submission already exists ("+prior.data.status+"). Contact support if you need to replace it.";return}status.textContent="Uploading securely...";const extension={"image/jpeg":"jpg","image/png":"png","image/webp":"webp"}[file.type];const path=me.id+"/"+crypto.randomUUID()+"."+extension;const uploaded=await client.storage.from("dating-id-documents").upload(path,file,{contentType:file.type,upsert:false});if(uploaded.error){status.textContent=uploaded.error.message;return}const saved=await client.from("dating_id_submissions").insert({user_id:me.id,object_path:path,status:"pending"});status.textContent=saved.error?"Submission could not be recorded. Contact support; do not upload again.":"ID submitted for private review. Verification is pending.";}
 async function resetPassword(){const email=$("email").value.trim();if(!email)return alert("Enter your email first.");const r=await client.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});$("feedback").textContent=r.error?.message||"If an account exists, check your email for the recovery link.";}
-async function updatePassword(){const password=$("newPassword").value;if(password.length<8)return alert("Use at least 8 characters.");const r=await client.auth.updateUser({password});$("recoveryStatus").textContent=r.error?.message||"Password updated.";if(!r.error){$("newPassword").value="";history.replaceState(null,"",location.pathname);$("recovery").hidden=true;}}
+async function updatePassword(){const password=$("newPassword").value;if(password.length<8)return alert("Use at least 8 characters.");const r=await client.auth.updateUser({password});$("recoveryStatus").textContent=r.error?.message||"Password updated.";if(!r.error){$("newPassword").value="";recoveryMode=false;history.replaceState(null,"",location.pathname);$("recovery").hidden=true;}}
 
 setInterval(()=>{if(me&&!document.hidden){if(!hasAccess()){$("chat").hidden=true;$("members").textContent="Access expired. Purchase 30-day access in Membership and verify your payment.";}else loadMessages().catch(showError);}},10000);
 window.addEventListener("unhandledrejection",event=>showError(event.reason||{}));
