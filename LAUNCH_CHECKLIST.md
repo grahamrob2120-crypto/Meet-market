@@ -1,14 +1,18 @@
-# Meet Market launch status — 2026-10-26
+# Meet Market launch status — 2026-10-27
 
-Implemented: signup/signin, private profile records, safe discovery, profile photo upload, mutual likes, chat, block/report, password recovery, server-enforced trial and single-use payment redemption.
+Public URL: https://grahamrob2120-crypto.github.io/Meet-market/
 
-Verified using transaction-rolled-back database tests: profile insertion, private birth dates, discovery, mutual-match messaging, block enforcement, client entitlement protection, payment activation and duplicate capture rejection. Supabase security advisor reports no findings.
+Implemented in this release:
+- Approved jean-shorts campaign artwork, responsive layout, no illustrative emoji member cards.
+- CAD 9.99 per 30 days, no automatic renewal.
+- Photo ID approval and two photos enforced server-side for discovery and interactions. Unavailable SMS requirement removed.
+- Nearby distance calculation fixed without exposing other members' private profile rows or coordinates.
+- Logout clears ID-review content.
 
-Launch blockers:
-- GitHub Pages is not enabled. Repository Settings > Pages > Source must be GitHub Actions. Existing deployment fails at configure-pages with Not Found.
-- dating-redeem-payment returns 503: Payment verification is not configured. Configure PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET in Supabase Edge Function secrets using the merchant account for the existing CAD 4.99 payment link. Never put a secret in the browser or repository.
-- Restore checkout only after a full real-account payment/activation test. The existing PayPal return URL points at an old Supabase HTML function; update it to the final hosted app URL. Shipping collection should be disabled for digital membership.
-- Verify signup confirmation and password recovery redirects against the final hosted URL, then run a two-account browser test including photo uploads and recovery.
-- Review reported members through public.dating_reports; establish moderation coverage and publish reviewed privacy/terms before public launch.
+Outstanding launch checks:
+- Payment verifier returns 503 Payment verification unavailable. Set PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET in Supabase Edge Function secrets; use the live merchant credentials. Keep these server-side.
+- Checkout is temporarily disabled until real PayPal payment and activation succeeds; previous payment-link checkout cannot currently activate paid access.
+- Complete two-account browser checks for confirmation email, recovery, profile photos, ID review, matching and messages. Database rollback tests cover access, distance, blocking, entitlement protection and duplicate-payment protection.
+- Owner must review submitted government IDs; no automated verification is claimed.
 
-SQL source: db/launch-repair.sql. Regression assertions: db/verify-access.sql (ROLLBACK leaves no test accounts or messages).
+No live payment was charged during these checks.
