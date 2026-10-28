@@ -8,16 +8,16 @@ function showRecovery(){recoveryMode=true;$("recovery").hidden=false;$("recovery
 function recoveryLinkPresent(){return location.hash.includes("type=recovery")||location.search.includes("type=recovery");}
 function clearPrivateUI(){
   me=null;member=null;recipient=null;
-  for(const id of ["workspace","redeemArea","chat","adminIdPanel"])$(id).hidden=true;
+  for(const id of ["workspace","chat","adminIdPanel"])$(id).hidden=true;
   if(!recoveryMode)$("recovery").hidden=true;
   for(const id of ["members","messages","blockedMembers","idReviewQueue"])$(id).replaceChildren();
-  for(const id of ["displayName","city","memberBirth","bio","photoFile","idDocumentFile","messageBody","newPassword","captureId","password"])$(id).value="";
-  for(const id of ["memberStatus","appFeedback","recoveryStatus","redeemStatus"])$(id).textContent="";
+  for(const id of ["displayName","city","memberBirth","bio","photoFile","idDocumentFile","messageBody","newPassword","password"])$(id).value="";
+  for(const id of ["memberStatus","appFeedback","recoveryStatus"])$(id).textContent="";
   $("status").textContent="Welcome";
 }
 async function loadSession(){
   const version=++sessionVersion;
-  $("workspace").hidden=true;$("redeemArea").hidden=true;
+  $("workspace").hidden=true;$("paymentStatus") && ($("paymentStatus").textContent="Sign in to subscribe for $9.99 CAD/month.");
   try {
     const {data,error}=await client.auth.getUser();
     if(version!==sessionVersion)return;
@@ -29,9 +29,9 @@ async function loadSession(){
     if(r.error)throw r.error;
     me=user;member=r.data;
     $("status").textContent=member?.display_name||me.email;
-    $("workspace").hidden=false;$("redeemArea").hidden=false;
+    $("workspace").hidden=false;
     for(const [id,key] of [["displayName","display_name"],["city","city"],["memberBirth","birth_date"],["bio","bio"]])$(id).value=member?.[key]||"";
-    if(member)$("memberStatus").textContent=hasAccess()?"Membership active until "+new Date(member.paid_until&&Date.parse(member.paid_until)>Date.now()?member.paid_until:member.trial_ends_at).toLocaleString():"Free access has ended. Purchase 30-day access with PayPal in the Membership section, then verify your payment.";
+    if(member)$("memberStatus").textContent=hasAccess()?"Membership active until "+new Date(member.paid_until&&Date.parse(member.paid_until)>Date.now()?member.paid_until:member.trial_ends_at).toLocaleString():"Free access has ended. Subscribe for $9.99 CAD per month using PayPal in the Membership section.";
     if(recoveryMode||recoveryLinkPresent())showRecovery();
     await discover();
   }catch(error){if(version===sessionVersion){clearPrivateUI();$("feedback").textContent="Unable to verify your session. Please sign in again.";showError(error);}}
@@ -57,7 +57,19 @@ client.auth.onAuthStateChange((event,session)=>{
 });
 loadSession().catch(showError);
 
-async function redeemPayment(){if(!me){openAuth();return}const capture_id=$("captureId").value.trim();const status=$("redeemStatus");status.textContent="Verifying payment…";if(!/^[A-Za-z0-9]{10,30}$/.test(capture_id)){status.textContent="Enter a valid PayPal capture transaction ID.";return}const {data,error}=await client.functions.invoke("dating-redeem-payment",{body:{capture_id}});if(error||data?.error){status.textContent=data?.error||error?.message||"Verification failed";return}status.textContent="Payment verified. Membership activated.";await loadSession();}
+async function startSubscription(){
+ const status=$("paymentStatus");
+ if(!me){openAuth("login");status.textContent="Sign in before subscribing.";return;}
+ if(!member){status.textContent="Create your profile before subscribing.";return;}
+ status.textContent="Connecting securely to PayPal…";
+ try{
+  const {data,error}=await client.functions.invoke("dating-paypal-checkout",{body:{}});
+  if(error||data?.error||!data?.url){status.textContent=data?.error||error?.message||"PayPal checkout unavailable. No charge was made.";return;}
+  const destination=new URL(data.url);
+  if(destination.protocol!=="https:"||!(destination.hostname==="paypal.com"||destination.hostname.endsWith(".paypal.com"))){status.textContent="Unexpected payment destination. Checkout stopped.";return;}
+  window.location.assign(destination.href);
+ }catch(error){status.textContent=error.message||"Could not start checkout. No charge was made.";}
+}
 
 function showError(error){$("appFeedback").textContent=error.message||"Connection failed. Please try again.";}
 async function blockMember(id){if(!confirm("Block this member? Neither of you will be able to discover or message the other."))return;const r=await client.from("dating_blocks").insert({user_id:me.id,target_id:id});if(r.error)return showError(r.error);if(recipient===id){recipient=null;$("chat").hidden=true;}await discover();await loadBlocks();}
