@@ -28,7 +28,7 @@ async function loadSession(){
     if(version!==sessionVersion)return;
     if(r.error)throw r.error;
     me=user;member=r.data;
-    $("status").textContent=member?.display_name||me.email;
+    $("status").textContent=member?.display_name||"My Account";
     $("workspace").hidden=false;
     for(const [id,key] of [["displayName","display_name"],["city","city"],["memberBirth","birth_date"],["bio","bio"]])$(id).value=member?.[key]||"";
     if(member)$("memberStatus").textContent=hasAccess()?"Membership active until "+new Date(member.paid_until&&Date.parse(member.paid_until)>Date.now()?member.paid_until:member.trial_ends_at).toLocaleString():"Free access has ended. Subscribe for $9.99 CAD per month using PayPal in the Membership section.";
